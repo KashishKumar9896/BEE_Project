@@ -159,6 +159,18 @@
             background-clip: text;
         }
 
+        .city-badge {
+            display: inline-block;
+            background: #f1f5ff;
+            color: #23395b;
+            padding: 6px 10px;
+            border-radius: 14px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-left: 10px;
+            box-shadow: 0 4px 12px rgba(102,126,234,0.08);
+        }
+
         .nav-menu {
             display: flex;
             list-style: none;
@@ -640,6 +652,21 @@
             border: 1px solid #f5c6cb;
         }
 
+        /* Restaurant image sizing */
+        .restaurant-image {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            border-radius: 12px;
+            display: block;
+            margin-bottom: 12px;
+        }
+
+        .star-rating i {
+            color: #ffb400;
+            margin-right: 2px;
+            font-size: 1rem;
+        }
         .hidden {
             display: none !important;
         }
@@ -654,7 +681,10 @@
     <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
-            <div class="logo">🍽️ FoodieHub</div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div class="logo">🍽️ FoodieHub</div>
+                            <div id="userCityBadge" class="city-badge hidden">Detecting...</div>
+                        </div>
             <div class="search-box">
                 <input type="search" id="searchInput" placeholder="Search restaurants or dishes..." aria-label="Search">
                 <button id="searchBtn" class="btn btn-secondary" title="Search"><i class="fas fa-search"></i></button>
@@ -1106,6 +1136,8 @@
         let currentUser = null;
         let authToken = localStorage.getItem('authToken');
         let chatHistory = [];
+        // Stores the user's last known location {lat, lon}
+        let userLocation = null;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
@@ -1832,23 +1864,47 @@
 
         async function loadRestaurants() {
             try {
+                // Ensure we have the user's location cached (may prompt for permission)
+                if (!userLocation) {
+                    await getUserLocation();
+                }
+                const userLoc = userLocation;
+
                 const response = await fetch(`${API_BASE}/restaurants`);
-                
                 if (response.ok) {
                     const data = await response.json();
                     const grid = document.getElementById('restaurantGrid');
                     grid.innerHTML = '';
-                    
+
                     data.data.forEach(restaurant => {
                         const card = document.createElement('div');
                         card.className = 'feature-card';
+
+                        // Compute distance if we have both user location and restaurant coordinates
+                        let distanceHtml = '';
+                        try {
+                            const coords = restaurant.location && Array.isArray(restaurant.location.coordinates) ? restaurant.location.coordinates : null;
+                            // coords format: [lon, lat]
+                            if (userLoc && coords && coords.length >= 2) {
+                                const restLon = parseFloat(coords[0]);
+                                const restLat = parseFloat(coords[1]);
+                                const distKm = haversineDistance(userLoc.lat, userLoc.lon, restLat, restLon);
+                                distanceHtml = `<p><strong>Distance:</strong> ${distKm.toFixed(1)} km</p>`;
+                            } else if (!userLoc) {
+                                distanceHtml = `<p><button class="btn btn-secondary" onclick="promptLocationAndRefresh()">Enable location to see distances</button></p>`;
+                            }
+                        } catch (e) {
+                            console.error('Distance calc error', e);
+                        }
+
                         card.innerHTML = `
-                            <i class="fas fa-store feature-icon"></i>
+                            <img src="${restaurant.image || '/menu.jpg'}" alt="Restaurant Image" class="restaurant-image" />
                             <h3>${restaurant.name}</h3>
                             <p>${restaurant.description || 'Delicious ' + restaurant.cuisine + ' cuisine'}</p>
                             <p><strong>Cuisine:</strong> ${restaurant.cuisine}</p>
-                            <p><strong>Rating:</strong> ${'⭐'.repeat(Math.floor(restaurant.rating))} ${restaurant.rating}</p>
-                            <p><strong>Location:</strong> ${restaurant.address.city}</p>
+                            <p><strong>Rating:</strong> <span class="star-rating">${renderStars(restaurant.rating)}</span> <span style="color:#666; font-weight:600; margin-left:6px;">${(restaurant.rating||0).toFixed(1)}</span></p>
+                            <p><strong>Location:</strong> ${restaurant.address ? restaurant.address.city : ''}</p>
+                            ${distanceHtml}
                             <button class="btn btn-primary" onclick="viewRestaurant('${restaurant._id}')">View Menu</button>
                         `;
                         grid.appendChild(card);
@@ -1857,6 +1913,93 @@
             } catch (error) {
                 console.error('Error loading restaurants:', error);
             }
+        }
+
+        // Prompt user for location and then reload restaurants
+        async function promptLocationAndRefresh(){
+            await getUserLocation(true);
+            loadRestaurants();
+        }
+
+        // Get user geolocation (returns {lat, lon} or null)
+        function getUserLocation(forcePrompt = false){
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) return resolve(null);
+
+                const setAndResolve = (pos) => {
+                    userLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                    // update navbar badge with reverse-geocoded city
+                    // log coords to console
+                    console.log('User location detected:', userLocation);
+                    reverseGeocode(userLocation.lat, userLocation.lon).then(city => setCityBadge(city));
+                    resolve(userLocation);
+                };
+
+                const onError = () => resolve(null);
+
+                // If permission API exists, and not forcing prompt, check permission first
+                if (navigator.permissions && !forcePrompt) {
+                    navigator.permissions.query({ name: 'geolocation' }).then(p => {
+                        if (p.state === 'denied') return resolve(null);
+                        navigator.geolocation.getCurrentPosition(setAndResolve, onError, { maximumAge: 60000, timeout: 10000 });
+                    }).catch(() => {
+                        navigator.geolocation.getCurrentPosition(setAndResolve, onError, { maximumAge: 60000, timeout: 10000 });
+                    });
+                } else {
+                    navigator.geolocation.getCurrentPosition(setAndResolve, onError, { maximumAge: 60000, timeout: 10000 });
+                }
+            });
+        }
+
+        // Reverse-geocode coordinates to a human-friendly city using Nominatim
+        async function reverseGeocode(lat, lon){
+            try{
+                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+                const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                if (!res.ok) return null;
+                const data = await res.json();
+                const addr = data.address || {};
+                return addr.city || addr.town || addr.village || addr.county || null;
+            } catch (e){
+                console.error('Reverse geocode failed', e);
+                return null;
+            }
+        }
+
+        function setCityBadge(city){
+            const el = document.getElementById('userCityBadge');
+            if (!el) return;
+            if (city) {
+                el.textContent = city;
+                el.classList.remove('hidden');
+            } else {
+                el.textContent = 'Location';
+                el.classList.remove('hidden');
+            }
+        }
+
+        // Haversine formula: returns distance in kilometers between two lat/lon points
+        function haversineDistance(lat1, lon1, lat2, lon2) {
+            const toRad = (v) => v * Math.PI / 180;
+            const R = 6371; // Earth radius km
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // Render star icons (supports half stars) for a 0-5 rating
+        function renderStars(rating){
+            const max = 5;
+            const out = [];
+            const full = Math.floor(rating || 0);
+            const half = (rating - full) >= 0.5;
+            for(let i=0;i<full;i++) out.push('<i class="fas fa-star" aria-hidden="true"></i>');
+            if(half) out.push('<i class="fas fa-star-half-alt" aria-hidden="true"></i>');
+            const empty = max - full - (half ? 1 : 0);
+            for(let i=0;i<empty;i++) out.push('<i class="far fa-star" aria-hidden="true"></i>');
+            return out.join('');
         }
 
         async function loadUserOrders() {

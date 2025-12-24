@@ -130,6 +130,11 @@
       font-weight: 700;
       font-size: 1.1rem;
     }
+    .dish-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
     .dish-description {
       color: #777;
       font-size: 0.9rem;
@@ -178,6 +183,7 @@
         <h1 id="restName">Restaurant</h1>
         <div class="cuisine" id="restCuisine"></div>
         <div class="location" id="restCity"></div>
+        <div class="location" id="restDistance" style="margin-top:6px; font-weight:600; color:#444;"></div>
       </div>
     </div>
 
@@ -204,6 +210,20 @@
           document.getElementById('restName').textContent = r.name;
           document.getElementById('restCuisine').textContent = r.cuisine || '';
           document.getElementById('restCity').textContent = (r.address && r.address.city) ? `${r.address.city}, ${r.address.state}` : '';
+
+          // Try to get user location and compute distance
+          try{
+            const userLoc = await getUserLocation();
+            const coords = r.location && Array.isArray(r.location.coordinates) ? r.location.coordinates : null; // [lon, lat]
+            if(userLoc && coords && coords.length>=2){
+              const restLon = parseFloat(coords[0]);
+              const restLat = parseFloat(coords[1]);
+              const dkm = haversineDistance(userLoc.lat, userLoc.lon, restLat, restLon);
+              document.getElementById('restDistance').textContent = `${dkm.toFixed(1)} km away`;
+            } else if(!userLoc){
+              document.getElementById('restDistance').innerHTML = `<button class="btn btn-secondary" onclick="promptLocationAndRefresh()">Enable location to show distance</button>`;
+            }
+          } catch(e){ console.error(e); }
         }
 
         const dRes = await fetch(`${API_BASE}/dishes/restaurant/${restaurantId}`);
@@ -211,22 +231,49 @@
         const list = document.getElementById('dishesList');
         list.innerHTML = '';
         if(dData.success && Array.isArray(dData.data) && dData.data.length){
-          dData.data.forEach(d => {
+          dData.data.forEach((d, idx) => {
             const el = document.createElement('div');
             el.className = 'dish-item';
             const badges = [];
             if(d.isVegetarian) badges.push('<span class="dish-badge"><i class="fas fa-leaf"></i> Vegetarian</span>');
             if(d.isVegan) badges.push('<span class="dish-badge"><i class="fas fa-leaf"></i> Vegan</span>');
             if(d.isGlutenFree) badges.push('<span class="dish-badge"><i class="fas fa-wheat-awn"></i> Gluten Free</span>');
+            // Determine how many buttons this dish should show
+            let buttonsHtml = '';
+            if (idx === 0) {
+              // First dish: only first button
+              buttonsHtml = `<div class="razorpay-placeholder" data-button="pl_RN70rac0EX8ZT3"></div>`;
+            } else if (idx === 1) {
+              // Second dish: only second button
+              buttonsHtml = `<div class="razorpay-placeholder" data-button="pl_RN8VspdcHhX6kt"></div>`;
+            } else {
+              // Other dishes: two buttons by default
+              buttonsHtml = `<div class="razorpay-placeholder" data-button="pl_RN70rac0EX8ZT3"></div><div class="razorpay-placeholder" data-button="pl_RN8VspdcHhX6kt"></div>`;
+            }
+
             el.innerHTML = `
               <div class="dish-name">
                 <span>${d.name}</span>
-                <span class="dish-price">$${(d.price||0).toFixed(2)}</span>
+                <div class="dish-actions">
+                  ${buttonsHtml}
+                </div>
               </div>
               ${d.description ? `<div class="dish-description">${d.description}</div>` : ''}
               ${badges.length ? `<div class="dish-meta">${badges.join('')}</div>` : ''}
             `;
             list.appendChild(el);
+
+            // Dynamically insert Razorpay payment-button scripts into placeholders
+            const placeholders = el.querySelectorAll('.razorpay-placeholder');
+            placeholders.forEach(ph => {
+              const form = document.createElement('form');
+              const script = document.createElement('script');
+              script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
+              script.setAttribute('data-payment_button_id', ph.getAttribute('data-button'));
+              script.async = true;
+              form.appendChild(script);
+              ph.parentNode.replaceChild(form, ph);
+            });
           });
         } else {
           list.innerHTML = '<div class="no-dishes"><div class="no-dishes-icon"><i class="fas fa-inbox"></i></div><p>No dishes available yet</p></div>';
@@ -238,6 +285,39 @@
     }
 
     document.addEventListener('DOMContentLoaded', loadMenu);
+
+    // --- location helpers for menu page ---
+    function promptLocationAndRefresh(){ getUserLocation(true).then(()=> loadMenu()); }
+
+    function getUserLocation(forcePrompt = false){
+      return new Promise((resolve) => {
+        if(!navigator.geolocation) return resolve(null);
+        if(navigator.permissions && !forcePrompt){
+          navigator.permissions.query({ name: 'geolocation' }).then(p => {
+            if(p.state === 'denied') return resolve(null);
+            navigator.geolocation.getCurrentPosition(pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }), () => resolve(null), { maximumAge:60000, timeout:10000 });
+          }).catch(() => {
+            navigator.geolocation.getCurrentPosition(pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }), () => resolve(null), { maximumAge:60000, timeout:10000 });
+          });
+        } else {
+          navigator.geolocation.getCurrentPosition(pos => {
+            const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+            console.log('User location detected (menu page):', loc);
+            resolve(loc);
+          }, () => resolve(null), { maximumAge:60000, timeout:10000 });
+        }
+      });
+    }
+
+    function haversineDistance(lat1, lon1, lat2, lon2){
+      const toRad = v => v * Math.PI / 180;
+      const R = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
   </script>
 </body>
 </html>

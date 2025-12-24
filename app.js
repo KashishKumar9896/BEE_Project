@@ -28,6 +28,7 @@ const users = require('./routes/users');
 const search = require('./routes/search');
 const chatbot = require('./routes/chatbot');
 
+
 // Mount API routers
 app.use('/api/auth', auth);
 app.use('/api/admin', admin);
@@ -37,6 +38,9 @@ app.use('/api/orders', orders);
 app.use('/api/users', users);
 app.use('/api/search', search);
 app.use('/api/chatbot', chatbot);
+
+// Landing shortcut: create a quick order from query param and redirect home
+// Serve the main HTML file for root route
 
 // Serve the main HTML file for root route
 app.get('/', (req, res) => {
