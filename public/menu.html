@@ -209,20 +209,16 @@
           const r = rData.data;
           document.getElementById('restName').textContent = r.name;
           document.getElementById('restCuisine').textContent = r.cuisine || '';
-          document.getElementById('restCity').textContent = (r.address && r.address.city) ? `${r.address.city}, ${r.address.state}` : '';
+          // Always show Jhansla in the nav location
+          document.getElementById('restCity').textContent = 'Jhansla';
 
-          // Try to get user location and compute distance
+          // Use fixed user location (30.51623 N, 76.66065 E)
+          // and compute distance to a fixed Jhansla coordinate for all restaurants
           try{
-            const userLoc = await getUserLocation();
-            const coords = r.location && Array.isArray(r.location.coordinates) ? r.location.coordinates : null; // [lon, lat]
-            if(userLoc && coords && coords.length>=2){
-              const restLon = parseFloat(coords[0]);
-              const restLat = parseFloat(coords[1]);
-              const dkm = haversineDistance(userLoc.lat, userLoc.lon, restLat, restLon);
-              document.getElementById('restDistance').textContent = `${dkm.toFixed(1)} km away`;
-            } else if(!userLoc){
-              document.getElementById('restDistance').innerHTML = `<button class="btn btn-secondary" onclick="promptLocationAndRefresh()">Enable location to show distance</button>`;
-            }
+            const userLoc = { lat: 30.51623, lon: 76.66065 };
+            const jhansla = { lat: 30.52000, lon: 76.66000 };
+            const dkm = haversineDistance(userLoc.lat, userLoc.lon, jhansla.lat, jhansla.lon);
+            document.getElementById('restDistance').textContent = `${dkm.toFixed(1)} km away`;
           } catch(e){ console.error(e); }
         }
 

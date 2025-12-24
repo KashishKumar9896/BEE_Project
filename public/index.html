@@ -1137,10 +1137,13 @@
         let authToken = localStorage.getItem('authToken');
         let chatHistory = [];
         // Stores the user's last known location {lat, lon}
-        let userLocation = null;
+        // Default to fixed coordinates (30.51623 N, 76.66065 E)
+        let userLocation = { lat: 30.51623, lon: 76.66065 };
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
+            // Show fixed nav location as Jhansla
+            setCityBadge('Jhansla');
             if (authToken) {
                 checkAuthStatus();
             }
@@ -1880,18 +1883,13 @@
                         const card = document.createElement('div');
                         card.className = 'feature-card';
 
-                        // Compute distance if we have both user location and restaurant coordinates
+                        // Compute distance using fixed Jhansla coordinate instead of restaurant coords
                         let distanceHtml = '';
                         try {
-                            const coords = restaurant.location && Array.isArray(restaurant.location.coordinates) ? restaurant.location.coordinates : null;
-                            // coords format: [lon, lat]
-                            if (userLoc && coords && coords.length >= 2) {
-                                const restLon = parseFloat(coords[0]);
-                                const restLat = parseFloat(coords[1]);
-                                const distKm = haversineDistance(userLoc.lat, userLoc.lon, restLat, restLon);
+                            const jhansla = { lat: 30.52000, lon: 76.66000 };
+                            if (userLoc) {
+                                const distKm = haversineDistance(userLoc.lat, userLoc.lon, jhansla.lat, jhansla.lon);
                                 distanceHtml = `<p><strong>Distance:</strong> ${distKm.toFixed(1)} km</p>`;
-                            } else if (!userLoc) {
-                                distanceHtml = `<p><button class="btn btn-secondary" onclick="promptLocationAndRefresh()">Enable location to see distances</button></p>`;
                             }
                         } catch (e) {
                             console.error('Distance calc error', e);
