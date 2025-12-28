@@ -1137,13 +1137,21 @@
         let authToken = localStorage.getItem('authToken');
         let chatHistory = [];
         // Stores the user's last known location {lat, lon}
-        // Default to fixed coordinates (30.51623 N, 76.66065 E)
-        let userLocation = { lat: 30.51623, lon: 76.66065 };
+        // Will be populated from the browser geolocation when available
+        let userLocation = null;
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            // Show fixed nav location as Jhansla
-            setCityBadge('Jhansla');
+            // Try to detect user location and update nav badge
+            getUserLocation().then(loc => {
+                if (loc) {
+                    userLocation = loc;
+                    reverseGeocode(userLocation.lat, userLocation.lon).then(city => setCityBadge(city));
+                } else {
+                    setCityBadge('Location');
+                }
+            }).catch(() => setCityBadge('Location'));
+
             if (authToken) {
                 checkAuthStatus();
             }
@@ -1883,13 +1891,17 @@
                         const card = document.createElement('div');
                         card.className = 'feature-card';
 
-                        // Compute distance using fixed Jhansla coordinate instead of restaurant coords
+                        // Compute distance between user and restaurant if restaurant coords are available
                         let distanceHtml = '';
                         try {
-                            const jhansla = { lat: 30.52000, lon: 76.66000 };
-                            if (userLoc) {
-                                const distKm = haversineDistance(userLoc.lat, userLoc.lon, jhansla.lat, jhansla.lon);
+                            if (userLoc && restaurant.location && Array.isArray(restaurant.location.coordinates) && restaurant.location.coordinates.length >= 2) {
+                                // GeoJSON coords are [lon, lat]
+                                const [restLon, restLat] = restaurant.location.coordinates;
+                                const distKm = haversineDistance(userLoc.lat, userLoc.lon, restLat, restLon);
                                 distanceHtml = `<p><strong>Distance:</strong> ${distKm.toFixed(1)} km</p>`;
+                            } else if (userLoc) {
+                                // No restaurant coords; leave distance blank (or implement geocoding fallback if desired)
+                                distanceHtml = '';
                             }
                         } catch (e) {
                             console.error('Distance calc error', e);
@@ -1952,7 +1964,7 @@
         // Reverse-geocode coordinates to a human-friendly city using Nominatim
         async function reverseGeocode(lat, lon){
             try{
-                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+                const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=en`;
                 const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
                 if (!res.ok) return null;
                 const data = await res.json();
