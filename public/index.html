@@ -2298,4 +2298,22 @@
         });
     </script>
 </body>
+        <!-- local offline snow -->
+        <script src="/vendor/snow.js"></script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                try {
+                    const root = document.body;
+                    Snow.init(root, {
+                        count: Math.min(160, Math.max(40, Math.floor(window.innerWidth / 8))),
+                        color: '#ffffff',
+                        size: [1, 3],
+                        speed: 1.0,
+                        zIndex: 1
+                    });
+                } catch (err) {
+                    console.warn('Could not initialize local snow:', err);
+                }
+            });
+        </script>
 </html>
