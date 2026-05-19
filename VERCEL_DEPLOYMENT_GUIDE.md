@@ -56,7 +56,6 @@ After deployment starts:
 3. Add the following variables:
 
 ```
-MONGODB_URI = mongodb+srv://labhanshgoel:Mongostudent%4023@cluster0.q9rat00.mongodb.net/restaurant_management
 
 JWT_SECRET = your_jwt_secret_key_here
 
