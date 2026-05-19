@@ -1,17 +1,14 @@
 {
   "name": "BEE1",
   "version": "1.0.0",
-  "lockfileVersion": 3,
-  "requires": true,
   "description": "Restaurant management system with admin, restaurant owner, and user panels",
   "main": "server.js",
-  "packages": {},
-  "devDependencies": {
-    "nodemon": "^3.1.10"
-  },
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -24,5 +21,8 @@
     "let-it-go": "^1.1.0",
     "mongoose": "^8.18.2",
     "multer": "^2.0.2"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }

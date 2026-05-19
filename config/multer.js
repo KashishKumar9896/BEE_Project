@@ -2,9 +2,14 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, '../public/uploads');
-if (!fs.existsSync(uploadsDir)) {
+// Determine upload directory based on environment
+// On Vercel (production), use /tmp (ephemeral storage)
+// On local development, use public/uploads
+const isProduction = process.env.NODE_ENV === 'production';
+const uploadsDir = isProduction ? '/tmp' : path.join(__dirname, '../public/uploads');
+
+// Create uploads directory if it doesn't exist (for local development only)
+if (!isProduction && !fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
